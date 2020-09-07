@@ -8,6 +8,8 @@ from app.libs.enums import PendingStatus
 from app.models.drift import Drift
 from app.models.gift import Gift
 from app.models.base import  db
+from app.models.user import User
+from app.models.wish import Wish
 from app.view_models.book import BookViewModel
 from app.libs import email
 from app.view_models.drift import DriftViewModel, DriftCollection
@@ -53,7 +55,13 @@ def pending():
 
 @web.route('/drift/<int:did>/reject')
 def reject_drift(did):
-    pass
+    with db.auto_commit():
+        drift =Drift.query.filter(Gift.uid == current_user.id,
+                                  Drift.id == did).first_or_404()
+        drift.pending = PendingStatus.reject
+        requester = User.query.get_or_404(drift.requester_id)
+        requester.beans +=1
+    return redirect(url_for('web.pending'))
 
 @login_required
 @web.route('/drift/<int:did>/redraw')
@@ -66,10 +74,21 @@ def redraw_drift(did):
     return redirect(url_for('web.pending'))
 
 
-
+@login_required
 @web.route('/drift/<int:did>/mailed')
 def mailed_drift(did):
-    pass
+    with db.auto_commit():
+        drift = Drift.query.filter_by(
+            gifter_id = current_user.id, id =did).first_or_404()
+        drift.pending = PendingStatus.success
+        current_user.beans +=1
+        gift = Gift.query.filter_by(id= drift.gifter_id).first_or_404()
+        gift.launched = True
+        Wish.query.filter_by(isbn = drift.isbn, uid = drift.requester_id,
+                             launched = False).update({Wish.launched: True})
+
+    return redirect(url_for('web.pending'))
+
 
 
 def save_drift(drift_form, current_gift):

@@ -3,7 +3,9 @@ from flask_login import login_required
 from werkzeug.utils import redirect
 from flask_login import login_required, current_user
 from app.models.base import  db
+from app.models.gift import Gift
 from app.models.wish import Wish
+from app.libs.email import send_email
 
 from app.spider.yushu_book import YuShuBook
 from app.view_models.wish import MyWishes
@@ -37,12 +39,23 @@ def save_to_wish(isbn):
         flash('这本书已添加至你的赠送清单或已存在于你的心愿清单，请不要重复添加')
     return redirect(url_for('web.book_detail', isbn=isbn))
 
-
+@login_required
 @web.route('/satisfy/wish/<int:wid>')
 def satisfy_wish(wid):
-    pass
+    wish = Wish.query.get_or_404(wid)
+    gift = Gift.query.filter_by(uid = current_user.id, isbn = Wish.isbn).first()
+    if not gift :
+        flash('not added, please add')
+    else:
+        send_email(wish.user.email,
+                  '有人像送你一本书','email/satisify_wish', wish = wish, gift = gift)
+        flash('email sent and you will got a drift. ')
+    return redirect(url_for('web.book_detail',isbn = wish.isbn))
 
-
+@login_required
 @web.route('/wish/book/<isbn>/redraw')
 def redraw_from_wish(isbn):
-    pass
+    wish = Wish.query.filter_by(isbn = isbn, launched = False).first_or_404()
+    with db.auto_commit():
+        wish.delete()
+    return redirect(url_for('web.my_wish'))
